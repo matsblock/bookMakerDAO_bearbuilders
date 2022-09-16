@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.9;
-
+pragma solidity 0.8.13;
 import "@chainlink/contracts/src/v0.8/ChainlinkClient.sol";
-
 /**
  * **** Data Conversions ****
  *
@@ -25,33 +23,26 @@ contract EnetscoresConsumer is ChainlinkClient {
     using CBORChainlink for BufferChainlink.buffer;
     address link = 0x326C977E6efc84E512bB9C30f76E30c160eD06FB;
     address oracle = 0xB9756312523826A566e222a34793E414A81c88E1;
-
     struct GameCreate {
         uint32 gameId;
         uint40 startTime;
         string homeTeam;
         string awayTeam;
     }
-
     struct GameResolve {
         uint32 gameId;
         uint8 homeScore;
         uint8 awayScore;
         string status;
     }
-
     mapping(bytes32 => bytes[]) public requestIdGames;
-
     error FailedTransferLINK(address to, uint256 amount);
 
- 
     constructor() {
         setChainlinkToken(link);
         setChainlinkOracle(oracle);
     }
-
     /* ========== EXTERNAL FUNCTIONS ========== */
-
     function cancelRequest(
         bytes32 _requestId,
         uint256 _payment,
@@ -60,7 +51,6 @@ contract EnetscoresConsumer is ChainlinkClient {
     ) external {
         cancelChainlinkRequest(_requestId, _payment, _callbackFunctionId, _expiration);
     }
-
     /**
      * @notice Stores the scheduled games.
      * @param _requestId the request ID for fulfillment.
@@ -71,9 +61,7 @@ contract EnetscoresConsumer is ChainlinkClient {
         recordChainlinkFulfillment(_requestId)
     {
         requestIdGames[_requestId] = _result;
-        
     }
-
     /**
      * @notice Requests the tournament games either to be created or to be resolved on a specific date.
      * @dev Requests the 'schedule' endpoint. Result is an array of GameCreate or GameResolve encoded (see structs).
@@ -91,14 +79,11 @@ contract EnetscoresConsumer is ChainlinkClient {
         uint256 _date
     ) external {
         Chainlink.Request memory req = buildOperatorRequest(_specId, this.fulfillSchedule.selector);
-
         req.addUint("market", _market);
         req.addUint("leagueId", _leagueId);
         req.addUint("date", _date);
-
         sendOperatorRequest(req, _payment);
     }
-
     /**
      * @notice Requests the tournament games either to be created or to be resolved on a specific date.
      * @dev Requests the 'schedule' endpoint. Result is an array of GameCreate or GameResolve encoded (see structs).
@@ -119,48 +104,33 @@ contract EnetscoresConsumer is ChainlinkClient {
         uint256[] calldata _gameIds
     ) external {
         Chainlink.Request memory req = buildOperatorRequest(_specId, this.fulfillSchedule.selector);
-
         req.addUint("market", _market);
         req.addUint("leagueId", _leagueId);
         req.addUint("date", _date);
         _addUintArray(req, "gameIds", _gameIds);
-
         sendOperatorRequest(req, _payment);
     }
-
     function setOracle(address _oracle) external {
         setChainlinkOracle(_oracle);
     }
-
     function setRequestIdGames(bytes32 _requestId, bytes[] memory _games) external {
         requestIdGames[_requestId] = _games;
     }
-
     function withdrawLink(uint256 _amount, address payable _payee) external {
         LinkTokenInterface linkToken = LinkTokenInterface(chainlinkTokenAddress());
         _requireTransferLINK(linkToken.transfer(_payee, _amount), _payee, _amount);
     }
-
-    /* ========== EXTERNAL /PUBLIC VIEW FUNCTIONS ========== */
-
+    /* ========== PUBLIC VIEW FUNCTIONS ========== */
     function getGameCreate(bytes32 _requestId, uint256 _idx) public view returns (GameCreate memory) {
         return _getGameCreateStruct(requestIdGames[_requestId][_idx]);
     }
-
     function getGameResolve(bytes32 _requestId, uint256 _idx) public view returns (GameResolve memory) {
         return _getGameResolveStruct(requestIdGames[_requestId][_idx]);
     }
-
-    function getGameCreateStructLength(bytes32 _requestId) public view returns (uint) {
-        return requestIdGames[_requestId].length;
-    }
-
-    function _getOracleAddress() external view returns (address) {
+    function _getOracleAddress() public view returns (address) {
         return chainlinkOracleAddress();
     }
-
     /* ========== PRIVATE VIEW FUNCTIONS ========== */
-
     function _getGameCreateStruct(bytes memory _data) private view returns (GameCreate memory) {
         uint32 gameId = uint32(bytes4(_sliceDynamicArray(0, 4, _data)));
         uint40 startTime = uint40(bytes5(_sliceDynamicArray(4, 9, _data)));
@@ -171,7 +141,6 @@ contract EnetscoresConsumer is ChainlinkClient {
         GameCreate memory gameCreate = GameCreate(gameId, startTime, homeTeam, awayTeam);
         return gameCreate;
     }
-
     function _getGameResolveStruct(bytes memory _data) private view returns (GameResolve memory) {
         uint32 gameId = uint32(bytes4(_sliceDynamicArray(0, 4, _data)));
         uint8 homeScore = uint8(bytes1(_data[4]));
@@ -180,8 +149,6 @@ contract EnetscoresConsumer is ChainlinkClient {
         GameResolve memory gameResolve = GameResolve(gameId, homeScore, awayScore, status);
         return gameResolve;
     }
-
-    
     function _sliceDynamicArray(
         uint256 _start,
         uint256 _end,
@@ -193,9 +160,7 @@ contract EnetscoresConsumer is ChainlinkClient {
         }
         return result;
     }
-
     /* ========== PRIVATE PURE FUNCTIONS ========== */
-
     function _addUintArray(
         Chainlink.Request memory _req,
         string memory _key,
@@ -214,7 +179,6 @@ contract EnetscoresConsumer is ChainlinkClient {
         r2.buf.endSequence();
         _req = r2;
     }
-
     function _requireTransferLINK(
         bool _success,
         address _to,
@@ -225,5 +189,13 @@ contract EnetscoresConsumer is ChainlinkClient {
         }
     }
 
+    //AGREGATED FUNCTIONS
 
+    function getGameCreateStructLength(bytes32 _requestId) public view returns (uint) {
+        return requestIdGames[_requestId].length;
+    }
+
+    function getGameResolveStructLength(bytes32 _requestId) public view returns (uint) {
+        return requestIdGames[_requestId].length;
+    }
 }
