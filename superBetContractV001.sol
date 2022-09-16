@@ -1,8 +1,8 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity 0.8.9;
+pragma solidity 0.8.13;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./dai.sol";
-import "./enetScoreConsumer.sol";
+import "./enetScoreConsumerV002.sol";
 
 contract superBetContract is EnetscoresConsumer{
     address public owner;
@@ -38,7 +38,6 @@ contract superBetContract is EnetscoresConsumer{
 
     uint public temporalRewardPublic;
 
-
     constructor(address _tokenAddress) {
         owner = msg.sender;
         tokenAddress =_tokenAddress;
@@ -57,7 +56,7 @@ contract superBetContract is EnetscoresConsumer{
     function createBet(bytes32 _requestId, uint256 _idx, uint _homeOdd, uint _tiedOdd,  uint _awayOdd) 
         public onlyOwner{
             GameCreate memory matchData;
-       //    matchData = mockedGameCreateMatch;
+            //matchData = mockedGameCreateMatch;
              matchData = getGameCreate(_requestId, _idx);
             //Obtengo el GameId para el partido especifico
             uint32 gameId = matchData.gameId;
@@ -72,6 +71,7 @@ contract superBetContract is EnetscoresConsumer{
 
     event userBet(address indexed _from, uint32 _gameId, uint _amount, betOption _choice);
     function setBet(uint32 _gameId, uint _amount, betOption _choice ) public {
+        require (matchs[_gameId].betOpen == true, "bet closed");
         if(_choice == betOption.home){
         matchs[_gameId].userBets[msg.sender].odd = matchs[_gameId].homeOdd;
         matchs[_gameId].homeTotalBets += _amount;
@@ -91,26 +91,19 @@ contract superBetContract is EnetscoresConsumer{
 
     }
 
-
     function closeBet(uint32 _gameId) public onlyOwner {
             matchs[_gameId].betOpen = false;
     }
 
-//Previo a esta funcion llamar getGameResolve. El request id debe ser del gameCreate para validar que el gameId sea el mismo
-    function resolveWinner(bytes32 _requestIdGameCreate, bytes32 _requestIdGameResolve, uint256 _idx) public onlyOwner {
-        //Obtengo el GameId para el partido especifico
+//Previo a esta funcion llamar getGameResolve pasando como parametro el gameId. 
+    function resolveWinner(uint32 _gameId, bytes32 _requestIdGameResolve ) public onlyOwner {
         GameResolve memory matchData;
-        matchData = getGameResolve(_requestIdGameResolve, _idx);
-        //matchData = mockedGameResolveMatch;
+        matchData = getGameResolve(_requestIdGameResolve, 0);
         uint32 gameId = matchData.gameId;
-        // Verifica que el gameId sea el mismo para gameResolve y game Create
-        GameCreate memory _matchData;
-        //_matchData = mockedGameCreateMatch;
-        _matchData = getGameCreate(_requestIdGameCreate, _idx);
-        uint32 _gameId = _matchData.gameId;
+        //El gameId para el cual se quiere obtener el ganador debe correspondese con el requestId de Game Resolve        
         require(gameId == _gameId, "gameIds not matchs");
         // Verifica que este cerrada la apuesta
-        require (matchs[gameId].betOpen == false, "bet not closed yet");
+        require (matchs[_gameId].betOpen == false, "bet not closed yet");
         // Verifica que el partido haya terminado
         require (keccak256(abi.encodePacked("finished")) == keccak256(abi.encodePacked(matchData.status)));
         // Setea el ganador en base a resultados
@@ -131,7 +124,7 @@ contract superBetContract is EnetscoresConsumer{
         require (matchs[_gameId].winnerResolved == true, "Winner not resolved");
         require (matchs[_gameId].winner == matchs[_gameId].userBets[msg.sender].option, "No rewards");
         //Calculo del reward
-        uint amount = matchs[_gameId].userBets[msg.sender].amount * matchs[_gameId].userBets[msg.sender].odd / 10**18;     
+        uint amount = matchs[_gameId].userBets[msg.sender].amount * matchs[_gameId].userBets[msg.sender].odd / 10**18; //1 eth     
         require(amount<=IERC20(tokenAddress).balanceOf(address(this)), "Not enought balance in treasury");
         IERC20(tokenAddress).transfer(msg.sender, amount);
         emit RewardClaim(msg.sender, amount);
@@ -145,25 +138,27 @@ contract superBetContract is EnetscoresConsumer{
         );
     }
 
+//FUNCIONES UTLIZADAS PARA EL TESTEO
+
     function mockWinner(uint32 _gameId, betOption _winner) public onlyOwner{
         matchs[_gameId].winner = _winner;
         matchs[_gameId].winnerResolved = true;
     }
 
-    function mockGetGameCreate(uint32 _gameId) public onlyOwner{
-        GameCreate memory matchData;
-        matchData.gameId = _gameId;
-        mockedGameCreateMatch = matchData;
-    }
+    // function mockGetGameCreate(uint32 _gameId) public onlyOwner{
+    //     GameCreate memory matchData;
+    //     matchData.gameId = _gameId;
+    //     mockedGameCreateMatch = matchData;
+    // }
 
-    function mockGetGameResolve(uint32 _gameId, uint8 _homeScore, uint8 _awayScore, string memory _status ) public onlyOwner{
-        GameResolve memory matchData;
-        matchData.gameId = _gameId;
-        matchData.homeScore = _homeScore;
-        matchData.awayScore = _awayScore;
-        matchData.status = _status;
-        mockedGameResolveMatch = matchData;
-    }
+    // function mockGetGameResolve(uint32 _gameId, uint8 _homeScore, uint8 _awayScore, string memory _status ) public onlyOwner{
+    //     GameResolve memory matchData;
+    //     matchData.gameId = _gameId;
+    //     matchData.homeScore = _homeScore;
+    //     matchData.awayScore = _awayScore;
+    //     matchData.status = _status;
+    //     mockedGameResolveMatch = matchData;
+    // }
 
     function getUserBet(uint32 _gameId) public view returns (betStruct memory) {
 
@@ -175,6 +170,7 @@ contract superBetContract is EnetscoresConsumer{
         return _userBet;
     }
 
+    //Funcion creada especificametne para controlar el reward a pagar
     function calculateReward(uint32 _gameId) public returns(uint){
         uint amount = matchs[_gameId].userBets[msg.sender].amount * matchs[_gameId].userBets[msg.sender].odd / 10**18;     
         temporalRewardPublic = amount;
